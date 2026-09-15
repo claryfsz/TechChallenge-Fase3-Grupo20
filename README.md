@@ -2,24 +2,55 @@
 ## Predição e Inteligência Analítica para Alfabetização no Brasil
 
 ## 1. Contexto do Problema
-<!-- Pessoa 1 -->
-Breve descrição do problema educacional: por que a alfabetização infantil é um
-indicador crítico, e por que antecipar riscos importa para gestores públicos.
+
+A alfabetização infantil é um dos principais indicadores do desenvolvimento
+educacional e social do Brasil. O programa federal Compromisso Nacional
+Criança Alfabetizada estabelece metas anuais de percentual de estudantes
+alfabetizados ao final do 2º ano do Ensino Fundamental para municípios e
+estados, com o objetivo de que todas as crianças brasileiras estejam
+alfabetizadas até 2030.
+
+Apenas o resultado atual não é suficiente para orientar decisões
+estratégicas: gestores públicos precisam antecipar riscos, identificar
+municípios vulneráveis e entender quais fatores têm maior peso no desempenho
+educacional. Este projeto irá transformar dados públicos em inteligência aplicada a essa decisão.
 
 ## 2. Objetivo Analítico
-<!-- Pessoa 1 -->
-Objetivo do projeto: desenvolver um modelo supervisionado para prever se um
-aluno será considerado alfabetizado ou não, a partir de variáveis
-educacionais, territoriais e socioeconômicas.
+
+Desenvolver um modelo supervisionado de classificação binária capaz de
+prever se um município atingiu ou não a meta de alfabetização estabelecida pelo programa, 
+a partir de diferentes variáveis.
+
+- **Target**: `1` se o município atingiu ou superou a meta
+  (`taxa_alfabetizacao >= meta_alfabetizacao`), `0` caso contrário.
+- **Unidade de análise**: município, ano-base 2024 (rede Municipal de ensino).
 
 ## 3. Descrição da Base Utilizada
-<!-- Pessoa 1 -->
-- Origem: camada Gold construída na Fase 2
-- Principais grupos de variáveis (indicadores de alfabetização, metas,
-  dados territoriais, socioeconômicos, educacionais complementares,
-  populacionais)
-- Fontes externas usadas para enriquecimento (se houver): IBGE, Censo
-  Escolar, FUNDEB, PNAD, Atlas do Desenvolvimento Humano
+
+A base parte da camada Gold construída na Fase 2 (Indicador Criança
+Alfabetizada, metas nacionais/estaduais/municipais, dados territoriais),
+enriquecida nesta fase com fontes externas:
+
+| Fonte | Dataset | O que traz |
+|---|---|---|
+| INEP – Avaliação da Alfabetização | `br_inep_avaliacao_alfabetizacao` | Indicador real e metas de alfabetização por município/ano |
+| INEP – Censo Escolar | `br_inep_censo_escolar` (tabela `escola`) | Matrículas, docentes e infraestrutura escolar por município/ano |
+| IBGE – População | `br_ibge_populacao` | População total do município/ano |
+| IBGE – PIB dos Municípios | `br_ibge_pib` | PIB total (último ano disponível) |
+
+**Correção de qualidade de dados (Fase 2 → Fase 3):** a tabela original de
+indicador apresentava linhas duplicadas por município/ano. A causa raiz foi
+dupla: (1) a coluna `rede` (Estadual/Municipal/Pública combinada) nãoo havia
+sido decodificada nem usada como chave de agregação; (2) o merge com a
+tabela de metas gerava um efeito cartesiano por falta de deduplicação prévia.
+A correção restringiu o indicador à rede Municipal e deduplicou a tabela de metas antes
+do merge.
+
+**Por que a base cobre apenas 2024:** as metas do programa são definidas
+para 2024–2030, mas resultado real só existe para anos já ocorridos. 2024 é
+o único ano em que meta e resultado real existem.
+
+**Granularidade final:** 5.232 municípios × 1 ano (2024), sem duplicatas.
 
 ## 4. Etapas de Modelagem
 <!-- Pessoa 2 -->
@@ -181,9 +212,31 @@ Forest final. Gráfico completo em `images/shap_summary.png`.
   função do ponto de partida socioeconômico de cada município.
 
 ## 8. Insights Encontrados
-<!-- Pessoa 1 + Pessoa 2 -->
-- Principais achados da EDA e da modelagem, traduzidos para linguagem
-  acessível a gestores públicos
+
+- **A meta definida importa mais do que a infraestrutura do município.**
+  Segundo o SHAP (seção 7), `meta_alfabetizacao` é a variável mais influente
+  do modelo: municípios com metas mais baixas têm probabilidade bem maior de atingi-las, 
+  enquanto metas mais ambiciosas reduzem essa chance.
+  Isso sugere que parte do "risco" observado é uma função direta de como a meta foi calibrada, 
+  não apenas da capacidade educacional do município.
+- **Saneamento básico é a infraestrutura mais associada ao sucesso.**
+  `pct_esgoto_rede_publica` foi a segunda variável mais importante. A
+  cobertura de esgoto na rede pública funciona como proxy de capacidade
+  administrativa e socioeconômica geral do município, não apenas de
+  infraestrutura escolar.
+- **Municípios menores tendem a ter mais chance de atingir a meta.**
+  Variáveis de porte (`num_escolas`, `total_matriculas_anos_iniciais`,
+  `total_docentes_anos_iniciais`) mostraram essa relação, possivelmente por
+  facilidade de gestão em escala menor — mas o efeito pode estar confundido
+  com outras variáveis (ver Limitações).
+- **PIB baixo esteve associado a maior chance de atingir a meta.** Isso
+  reforça a hipótese de que as metas do programa já são calibradas
+  considerando o ponto de partida socioeconômico de cada município.
+- **O desempenho preditivo é modesto por desenho, não por falha técnica.**
+  Depois de remover corretamente as variáveis de data leakage (notas e
+  proficiência da mesma avaliação), o modelo ficou com um AUC de ~0.62 —
+  esperado, já que restam apenas variáveis de infraestrutura, porte e a
+  meta, que têm relação real mas limitada com o resultado educacional.
 
 ## 9. Limitações do Projeto
 <!-- Pessoa 2 -->
@@ -209,14 +262,39 @@ Forest final. Gráfico completo em `images/shap_summary.png`.
   causal direta com o resultado educacional.
 
 ## 10. Aplicação Prática para Políticas Públicas
-<!-- Pessoa 1 -->
-- Como os resultados podem apoiar decisões (identificação de municípios
-  de risco, priorização de recursos, etc.)
+
+- **Priorização de municípios de risco**: o modelo pode apoiar secretarias
+  estaduais de educação a identificar, ainda no início do ano letivo,
+  municípios com maior probabilidade de não atingir a meta, permitindo
+  direcionar apoio técnico e recursos antes do resultado final.
+- **Revisão da calibração de metas**: como a própria meta é o fator mais
+  influente na previsão, o modelo pode ser usado para simular o impacto de
+  metas alternativas antes de sua publicação, testando se uma meta é
+  realista dado o perfil do município.
+- **Investimento em saneamento como política educacional indireta**: a
+  relação entre `pct_esgoto_rede_publica` e o atingimento da meta sugere que
+  investimentos em infraestrutura básica (não apenas escolar) podem ter
+  efeito colateral positivo sobre indicadores educacionais.
+- **Monitoramento diferenciado por porte de município**: dado o padrão
+  observado em municípios menores, políticas de alfabetização podem
+  precisar de desenhos diferentes para municípios pequenos vs. grandes,
+  em vez de uma meta única nacional.
 
 ## 11. Possíveis Evoluções Futuras
-<!-- Pessoa 1 + Pessoa 2 -->
-- Próximos passos: novas fontes de dados, outros modelos, monitoramento
-  contínuo, etc.
+
+- Incorporar o Atlas do Desenvolvimento Humano (IDHM e indicadores
+  socioeconômicos municipais) e a PNAD para variáveis de renda e
+  vulnerabilidade social mais granulares.
+- Investigar a abertura setorial do PIB (agropecuária, indústria, serviços)
+  assim que o IBGE publicar os dados para os anos mais recentes.
+- Expandir a série temporal à medida que novos anos de resultado real forem
+  publicados, permitindo validação temporal do modelo (treinar em anos
+  anteriores, testar em anos futuros).
+- Testar modelos que separem o efeito da meta do efeito das variáveis de
+  infraestrutura, para isolar melhor o que é "calibração da meta" do que é
+  "capacidade real do município".
+- Avaliar dados segmentados por rede Estadual, para comparar fatores de
+  risco entre redes de ensino.
 
 ## Como Reproduzir
 
@@ -267,4 +345,4 @@ TechChallenge-Fase3-Grupo20/
 ```
 
 ## Vídeo Executivo
-Link: <inserir link do vídeo>
+Link:
