@@ -345,4 +345,4 @@ TechChallenge-Fase3-Grupo20/
 ```
 
 ## Vídeo Executivo
-Link:
+Link: https://www.youtube.com/watch?v=OjDlfp5QvzE
